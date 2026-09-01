@@ -26,6 +26,8 @@ VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...
 
 On Vercel, add those as environment variables. Publishable keys are public by design; never commit the secret.
 
+**Private home server (recommended if you want the box in your house):** see [SELFHOST.md](./SELFHOST.md) — mini PC + Docker + Tailscale, no open router ports.
+
 Live on-ramp currently supports **BTC, ETH, SOL, AVAX** to a locked Tangem address. Other assets remain preview-only.
 
 ## Run

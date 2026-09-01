@@ -1,0 +1,13 @@
+# Binds only to this machine. Tailscale Serve is the HTTPS front door.
+# Never publish 8080 to 0.0.0.0 — that would expose Cadence on your LAN.
+services:
+  cadence:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+    ports:
+      - "127.0.0.1:8080:8080"
