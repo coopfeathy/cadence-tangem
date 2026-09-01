@@ -11,6 +11,7 @@ Cadence never holds keys and never sees a card number. Production charges go thr
 - Preview mode uses a one-tap test rail (`···· 4242`) we mint locally — you never type a number
 - Live mode mounts Stripe’s on-ramp; Cadence only stores a rail label
 - Destination is a receive address you paste from the Tangem app
+- Cadences can only settle to addresses already saved in Wallet — you cannot type a new destination at checkout
 
 ## Stripe setup (free to start)
 

@@ -1,7 +1,7 @@
 import { Pause, Play, SkipForward, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ASSET_BY_ID } from "@/lib/assets";
+import { ASSET_BY_ID, walletMatchesAsset } from "@/lib/assets";
 import { frequencyLabel, money } from "@/lib/format";
 import { countdownLabel } from "@/lib/schedule";
 import { useCadence } from "@/lib/store";
@@ -22,7 +22,7 @@ export function PlansPage() {
         <div>
           <h1 className="font-display text-3xl font-medium tracking-tight">Plans</h1>
           <p className="mt-2 text-sm text-muted">
-            Each cadence is a repeating buy aimed at a Tangem address.
+            Each cadence buys only to a Tangem address you’ve already saved.
           </p>
         </div>
         <Button onClick={openComposer}>New cadence</Button>
@@ -32,7 +32,8 @@ export function PlansPage() {
         <div className="rounded-2xl bg-surface px-5 py-10 shadow-[var(--shadow-border)]">
           <p className="font-display text-2xl">No cadences yet</p>
           <p className="mt-2 max-w-md text-sm text-muted">
-            Create one to start stacking on a schedule.
+            Create one to start stacking on a schedule. Destinations come from
+            Wallet — you can’t type a new address at checkout.
           </p>
         </div>
       ) : (
@@ -40,6 +41,7 @@ export function PlansPage() {
           {plans.map((plan) => {
             const asset = ASSET_BY_ID[plan.assetId];
             const wallet = wallets.find((w) => w.id === plan.walletId);
+            const destOk = walletMatchesAsset(wallet, plan.assetId);
             return (
               <li
                 key={plan.id}
@@ -52,22 +54,25 @@ export function PlansPage() {
                     </p>
                     <p className="font-display mt-1 text-3xl">{money(plan.amountUsd)}</p>
                     <p className="mt-2 font-mono text-xs text-subtle">
-                      {wallet
+                      {destOk && wallet
                         ? `${wallet.label} · ${shortenAddress(wallet.address)}`
-                        : "Wallet missing"}
+                        : "Address removed — add it again to resume"}
                     </p>
                     <p className="mt-1 text-xs text-muted">
-                      Next {countdownLabel(plan.nextRunAt)}
+                      {destOk
+                        ? `Next ${countdownLabel(plan.nextRunAt)}`
+                        : "Paused until a matching address is saved"}
                     </p>
                   </div>
-                  <Badge variant={plan.active ? "solid" : "default"}>
-                    {plan.active ? "Live" : "Paused"}
+                  <Badge variant={plan.active && destOk ? "solid" : "default"}>
+                    {plan.active && destOk ? "Live" : "Paused"}
                   </Badge>
                 </div>
                 <div className="mt-5 flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     variant="secondary"
+                    disabled={!destOk}
                     onClick={() => requestCheckout(plan.id, true)}
                   >
                     Buy now
@@ -75,6 +80,7 @@ export function PlansPage() {
                   <Button
                     size="sm"
                     variant="ghost"
+                    disabled={!destOk && !plan.active}
                     onClick={() => togglePlan(plan.id)}
                   >
                     {plan.active ? (
@@ -84,7 +90,12 @@ export function PlansPage() {
                     )}
                     {plan.active ? "Pause" : "Resume"}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => skipNext(plan.id)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!destOk}
+                    onClick={() => skipNext(plan.id)}
+                  >
                     <SkipForward className="size-4" />
                     Skip next
                   </Button>

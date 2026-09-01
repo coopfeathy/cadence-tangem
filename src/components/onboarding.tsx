@@ -135,6 +135,8 @@ function WalletStep({
         </h1>
         <p className="mt-2 text-sm text-muted">
           Open the Tangem app, copy a receive address, and paste it here.
+          Later cadences can only buy to addresses you save — not ones you
+          type at checkout.
         </p>
       </div>
 

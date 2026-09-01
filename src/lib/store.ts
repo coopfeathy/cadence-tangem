@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { ASSET_BY_ID, type AssetId } from "./assets";
+import { ASSET_BY_ID, type AssetId, walletMatchesAsset } from "./assets";
 import { makeRef, nextRun } from "./schedule";
 import type { Fill, Frequency, PaymentCard, Plan, PriceMap, Wallet } from "./types";
 
@@ -27,7 +27,7 @@ type CadenceState = {
     walletId: string;
     cardId: string;
     buyNow: boolean;
-  }) => Plan;
+  }) => Plan | null;
   togglePlan: (id: string) => void;
   removePlan: (id: string) => void;
   skipNext: (id: string) => void;
@@ -97,14 +97,20 @@ export const useCadence = create<CadenceState>()(
       closeComposer: () => set({ composerOpen: false }),
 
       createPlan: (input) => {
+        const state = get();
+        const wallet = state.wallets.find((w) => w.id === input.walletId);
+        const card = state.cards.find((c) => c.id === input.cardId);
+        if (!wallet || !card || !walletMatchesAsset(wallet, input.assetId)) {
+          return null;
+        }
         const now = Date.now();
         const plan: Plan = {
           id: nid(),
           assetId: input.assetId,
           amountUsd: input.amountUsd,
           frequency: input.frequency,
-          walletId: input.walletId,
-          cardId: input.cardId,
+          walletId: wallet.id,
+          cardId: card.id,
           active: true,
           createdAt: now,
           nextRunAt: nextRun(now, input.frequency),
@@ -120,17 +126,21 @@ export const useCadence = create<CadenceState>()(
 
       togglePlan: (id) =>
         set((s) => ({
-          plans: s.plans.map((p) =>
-            p.id === id
-              ? {
-                  ...p,
-                  active: !p.active,
-                  nextRunAt: !p.active
-                    ? Math.max(p.nextRunAt, Date.now() + 60_000)
-                    : p.nextRunAt,
-                }
-              : p,
-          ),
+          plans: s.plans.map((p) => {
+            if (p.id !== id) return p;
+            const turningOn = !p.active;
+            if (turningOn) {
+              const wallet = s.wallets.find((w) => w.id === p.walletId);
+              if (!walletMatchesAsset(wallet, p.assetId)) return p;
+            }
+            return {
+              ...p,
+              active: !p.active,
+              nextRunAt: turningOn
+                ? Math.max(p.nextRunAt, Date.now() + 60_000)
+                : p.nextRunAt,
+            };
+          }),
         })),
 
       removePlan: (id) =>
@@ -143,8 +153,14 @@ export const useCadence = create<CadenceState>()(
           ),
         })),
 
-      requestCheckout: (planId, immediate) =>
-        set({ checkout: { planId, immediate } }),
+      requestCheckout: (planId, immediate) => {
+        const state = get();
+        const plan = state.plans.find((p) => p.id === planId);
+        if (!plan) return;
+        const wallet = state.wallets.find((w) => w.id === plan.walletId);
+        if (!walletMatchesAsset(wallet, plan.assetId)) return;
+        set({ checkout: { planId, immediate } });
+      },
 
       closeCheckout: () => set({ checkout: null }),
 
@@ -155,7 +171,15 @@ export const useCadence = create<CadenceState>()(
         const wallet = state.wallets.find((w) => w.id === plan.walletId);
         const card = state.cards.find((c) => c.id === plan.cardId);
         const quote = prices[plan.assetId];
-        if (!wallet || !card || !quote || quote.usd <= 0) return null;
+        if (
+          !wallet ||
+          !card ||
+          !quote ||
+          quote.usd <= 0 ||
+          !walletMatchesAsset(wallet, plan.assetId)
+        ) {
+          return null;
+        }
 
         const quantity = plan.amountUsd / quote.usd;
         const fill: Fill = {

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft, ArrowRight, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -12,7 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ASSET_BY_ID, ASSETS, type AssetId } from "@/lib/assets";
+import {
+  ASSET_BY_ID,
+  assetsForNetworks,
+  type AssetId,
+  walletMatchesAsset,
+} from "@/lib/assets";
 import { buysPerYear, frequencyLabel, money, qty } from "@/lib/format";
 import { useCadence } from "@/lib/store";
 import type { Frequency } from "@/lib/types";
@@ -31,6 +37,11 @@ export function PlanComposer() {
   const createPlan = useCadence((s) => s.createPlan);
   const { prices } = usePrices();
 
+  const buyable = useMemo(
+    () => assetsForNetworks(wallets.map((w) => w.network)),
+    [wallets],
+  );
+
   const [step, setStep] = useState(0);
   const [assetId, setAssetId] = useState<AssetId>("btc");
   const [amount, setAmount] = useState(25);
@@ -40,9 +51,13 @@ export function PlanComposer() {
   const [cardId, setCardId] = useState<string>("");
   const [buyNow, setBuyNow] = useState(true);
 
-  const asset = ASSET_BY_ID[assetId];
-  const quote = prices[assetId];
-  const matchingWallets = wallets.filter((w) => w.network === asset.network);
+  const effectiveAssetId: AssetId =
+    buyable.some((a) => a.id === assetId) ? assetId : (buyable[0]?.id ?? "btc");
+  const asset = ASSET_BY_ID[effectiveAssetId];
+  const quote = prices[effectiveAssetId];
+  const matchingWallets = wallets.filter((w) =>
+    walletMatchesAsset(w, effectiveAssetId),
+  );
   const resolvedAmount = custom ? Number(custom) : amount;
   const amountOk =
     Number.isFinite(resolvedAmount) &&
@@ -53,11 +68,9 @@ export function PlanComposer() {
   const estQty =
     amountOk && quote?.usd ? resolvedAmount / quote.usd : 0;
 
-  const canWallet = matchingWallets.length > 0 && cards.length > 0;
-
   function reset() {
     setStep(0);
-    setAssetId("btc");
+    setAssetId(buyable[0]?.id ?? "btc");
     setAmount(25);
     setCustom("");
     setFrequency("weekly");
@@ -66,13 +79,21 @@ export function PlanComposer() {
     setBuyNow(true);
   }
 
-  const chosenWallet = useMemo(
-    () => matchingWallets.find((w) => w.id === walletId) ?? matchingWallets[0],
-    [matchingWallets, walletId],
-  );
+  const chosenWallet = useMemo(() => {
+    const picked = matchingWallets.find((w) => w.id === walletId);
+    if (picked) return picked;
+    return matchingWallets.length === 1 ? matchingWallets[0] : undefined;
+  }, [matchingWallets, walletId]);
   const chosenCard = useMemo(
-    () => cards.find((c) => c.id === cardId) ?? cards[0],
+    () => cards.find((c) => c.id === cardId) ?? (cards.length === 1 ? cards[0] : undefined),
     [cards, cardId],
+  );
+
+  const canCreate = Boolean(
+    chosenWallet &&
+      chosenCard &&
+      amountOk &&
+      walletMatchesAsset(chosenWallet, effectiveAssetId),
   );
 
   return (
@@ -85,28 +106,65 @@ export function PlanComposer() {
         }
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>New cadence</DialogTitle>
           <DialogDescription>
-            Recurring buy, delivered to your Tangem.
+            Recurring buy, delivered only to a Tangem address you’ve saved.
           </DialogDescription>
         </DialogHeader>
 
-        {step === 0 ? (
+        <div className="min-h-0 overflow-y-auto pr-1">
+
+        {buyable.length === 0 ? (
+          <div className="space-y-4 py-2">
+            <div className="flex size-12 items-center justify-center rounded-2xl bg-elevated">
+              <Wallet className="size-5 text-muted" />
+            </div>
+            <p className="font-display text-2xl leading-tight">
+              Add an address first
+            </p>
+            <p className="text-sm text-muted">
+              Cadence will not buy to an address you haven’t saved. Paste a
+              receive address from the Tangem app, then come back.
+            </p>
+            <Button asChild className="w-full">
+              <Link
+                to="/wallet"
+                onClick={() => {
+                  close();
+                  reset();
+                }}
+              >
+                Add a Tangem address
+              </Link>
+            </Button>
+          </div>
+        ) : null}
+
+        {buyable.length > 0 && step === 0 ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted">Choose an asset</p>
+            <p className="text-sm text-muted">
+              Only coins that match an address you’ve added.
+            </p>
             <div className="grid grid-cols-2 gap-2">
-              {ASSETS.map((a) => {
+              {buyable.map((a) => {
                 const p = prices[a.id];
+                const destCount = wallets.filter((w) =>
+                  walletMatchesAsset(w, a.id),
+                ).length;
                 return (
                   <button
                     key={a.id}
                     type="button"
-                    onClick={() => setAssetId(a.id)}
+                    onClick={() => {
+                      setAssetId(a.id);
+                      setWalletId("");
+                    }}
                     className={cn(
                       "flex flex-col items-start rounded-xl bg-elevated px-3 py-3 text-left shadow-[var(--shadow-border)] transition-shadow duration-150 hover:shadow-[var(--shadow-border-hover)]",
-                      assetId === a.id && "bg-secondary shadow-[var(--shadow-border-hover)]",
+                      effectiveAssetId === a.id &&
+                        "bg-secondary shadow-[var(--shadow-border-hover)]",
                     )}
                   >
                     <span className="text-sm font-medium">{a.ticker}</span>
@@ -114,18 +172,27 @@ export function PlanComposer() {
                     <span className="mt-2 font-mono text-xs tabular-nums text-muted">
                       {p ? money(p.usd, p.usd >= 100 ? 0 : 2) : "—"}
                     </span>
+                    <span className="mt-1 text-xs text-subtle">
+                      {destCount} {destCount === 1 ? "address" : "addresses"}
+                    </span>
                   </button>
                 );
               })}
             </div>
-            <Button className="mt-2 w-full" onClick={() => setStep(1)}>
+            <Button
+              className="mt-2 w-full"
+              onClick={() => {
+                setAssetId(effectiveAssetId);
+                setStep(1);
+              }}
+            >
               Continue
               <ArrowRight className="size-4" />
             </Button>
           </div>
         ) : null}
 
-        {step === 1 ? (
+        {buyable.length > 0 && step === 1 ? (
           <div className="space-y-6">
             <div className="space-y-2">
               <Label>Amount, USD</Label>
@@ -202,13 +269,17 @@ export function PlanComposer() {
           </div>
         ) : null}
 
-        {step === 2 ? (
+        {buyable.length > 0 && step === 2 ? (
           <div className="space-y-6">
             <div className="space-y-2">
               <Label>Tangem destination</Label>
+              <p className="text-xs text-subtle">
+                Saved {asset.networkLabel} addresses only. Add another on Wallet
+                if you need a different one.
+              </p>
               {matchingWallets.length === 0 ? (
                 <p className="rounded-xl bg-elevated px-3 py-3 text-sm text-muted">
-                  Add a {asset.networkLabel} address in Wallet before this
+                  No {asset.networkLabel} address saved. Add one before this
                   cadence can settle.
                 </p>
               ) : (
@@ -220,7 +291,8 @@ export function PlanComposer() {
                       onClick={() => setWalletId(w.id)}
                       className={cn(
                         "flex w-full flex-col items-start rounded-xl bg-elevated px-3 py-3 text-left",
-                        (chosenWallet?.id === w.id) && "shadow-[var(--shadow-border-hover)] bg-secondary",
+                        chosenWallet?.id === w.id &&
+                          "bg-secondary shadow-[var(--shadow-border-hover)]",
                       )}
                     >
                       <span className="text-sm">{w.label}</span>
@@ -248,7 +320,8 @@ export function PlanComposer() {
                       onClick={() => setCardId(c.id)}
                       className={cn(
                         "flex w-full items-center justify-between rounded-xl bg-elevated px-3 py-3 text-left",
-                        chosenCard?.id === c.id && "bg-secondary shadow-[var(--shadow-border-hover)]",
+                        chosenCard?.id === c.id &&
+                          "bg-secondary shadow-[var(--shadow-border-hover)]",
                       )}
                     >
                       <span className="text-sm">
@@ -274,7 +347,10 @@ export function PlanComposer() {
                 {money(resolvedAmount)} {frequencyLabel(frequency).toLowerCase()}
               </p>
               <p className="mt-1 text-sm text-muted">
-                {asset.ticker} to {chosenWallet ? shortenAddress(chosenWallet.address) : "your Tangem"}
+                {asset.ticker} to{" "}
+                {chosenWallet
+                  ? `${chosenWallet.label} · ${shortenAddress(chosenWallet.address)}`
+                  : "a saved Tangem address"}
                 {quote ? ` · ~${qty(estQty, asset.ticker)}` : ""}
               </p>
             </div>
@@ -285,17 +361,23 @@ export function PlanComposer() {
               </Button>
               <Button
                 className="flex-1"
-                disabled={!canWallet || !chosenWallet || !chosenCard || !amountOk}
+                disabled={!canCreate}
                 onClick={() => {
                   if (!chosenWallet || !chosenCard) return;
-                  createPlan({
-                    assetId,
+                  const plan = createPlan({
+                    assetId: effectiveAssetId,
                     amountUsd: resolvedAmount,
                     frequency,
                     walletId: chosenWallet.id,
                     cardId: chosenCard.id,
                     buyNow,
                   });
+                  if (!plan) {
+                    toast.error(
+                      "That cadence needs a Tangem address you’ve already saved.",
+                    );
+                    return;
+                  }
                   if (!buyNow) toast.success("Cadence is live");
                   reset();
                 }}
@@ -305,6 +387,7 @@ export function PlanComposer() {
             </div>
           </div>
         ) : null}
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -142,8 +142,18 @@ export const NETWORKS: { id: NetworkId; label: string; hint: string }[] = [
   { id: "bnb", label: "BNB Chain", hint: "0x…" },
 ];
 
-export function assetsOnNetwork(network: NetworkId): Asset[] {
-  return ASSETS.filter((asset) => asset.network === network);
+export function assetsForNetworks(networks: Iterable<NetworkId>): Asset[] {
+  const allowed = new Set<NetworkId>(networks);
+  return ASSETS.filter((asset) => allowed.has(asset.network));
+}
+
+export function walletMatchesAsset(
+  wallet: { network: NetworkId } | undefined | null,
+  assetId: AssetId,
+): boolean {
+  if (!wallet) return false;
+  const asset = ASSET_BY_ID[assetId];
+  return Boolean(asset) && wallet.network === asset.network;
 }
 
 export const SAMPLE_ADDRESSES: Record<NetworkId, string> = {

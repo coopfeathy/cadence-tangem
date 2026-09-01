@@ -4,7 +4,7 @@ import { ArrowUpRight, Pause, Play, Repeat } from "lucide-react";
 import { CadenceCard } from "@/components/cadence-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ASSET_BY_ID, NETWORKS } from "@/lib/assets";
+import { ASSET_BY_ID, NETWORKS, walletMatchesAsset } from "@/lib/assets";
 import {
   compactMoney,
   frequencyLabel,
@@ -18,6 +18,7 @@ import { countdownLabel } from "@/lib/schedule";
 import { useCadence } from "@/lib/store";
 import { usePrices } from "@/components/providers";
 import { cn } from "@/lib/utils";
+import { shortenAddress } from "@/lib/validate";
 
 export function Dashboard() {
   const wallets = useCadence((s) => s.wallets);
@@ -40,7 +41,13 @@ export function Dashboard() {
   const holdings = holdingsFromFills(fills, prices);
   const series = valueSeries(fills, prices);
   const next = plans
-    .filter((p) => p.active)
+    .filter((p) =>
+      p.active &&
+      walletMatchesAsset(
+        wallets.find((w) => w.id === p.walletId),
+        p.assetId,
+      ),
+    )
     .slice()
     .sort((a, b) => a.nextRunAt - b.nextRunAt)[0];
   const primary = wallets[0];
@@ -204,8 +211,8 @@ export function Dashboard() {
           <div className="mt-3 rounded-2xl bg-surface px-5 py-8 shadow-[var(--shadow-border)]">
             <p className="font-display text-2xl">Start with something small.</p>
             <p className="mt-2 max-w-md text-sm text-muted">
-              $10 of bitcoin every Friday. $25 of ether on payday. Cadence
-              repeats it, and each slice is aimed at your Tangem.
+              $10 of bitcoin every Friday. Each slice lands on a Tangem
+              address you’ve already saved — never one you type at checkout.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               <Button onClick={openComposer}>Create a cadence</Button>
@@ -215,6 +222,8 @@ export function Dashboard() {
           <ul className="mt-3 grid gap-3 sm:grid-cols-2">
             {plans.map((plan) => {
               const asset = ASSET_BY_ID[plan.assetId];
+              const wallet = wallets.find((w) => w.id === plan.walletId);
+              const destOk = walletMatchesAsset(wallet, plan.assetId);
               return (
                 <li
                   key={plan.id}
@@ -229,18 +238,26 @@ export function Dashboard() {
                       <p className="mt-1 text-sm text-muted">
                         {frequencyLabel(plan.frequency)}
                       </p>
+                      <p className="mt-2 font-mono text-xs text-subtle">
+                        {destOk && wallet
+                          ? `${wallet.label} · ${shortenAddress(wallet.address)}`
+                          : "Address removed"}
+                      </p>
                     </div>
-                    <Badge variant={plan.active ? "solid" : "default"}>
-                      {plan.active ? "Live" : "Paused"}
+                    <Badge variant={plan.active && destOk ? "solid" : "default"}>
+                      {plan.active && destOk ? "Live" : "Paused"}
                     </Badge>
                   </div>
                   <p className="mt-4 text-xs text-subtle">
-                    Next {countdownLabel(plan.nextRunAt, now)}
+                    {destOk
+                      ? `Next ${countdownLabel(plan.nextRunAt, now)}`
+                      : "Add that address again to resume"}
                   </p>
                   <div className="mt-4 flex gap-2">
                     <Button
                       size="sm"
                       variant="secondary"
+                      disabled={!destOk}
                       onClick={() => requestCheckout(plan.id, true)}
                     >
                       <ArrowUpRight className="size-4" />
@@ -249,6 +266,7 @@ export function Dashboard() {
                     <Button
                       size="icon-sm"
                       variant="ghost"
+                      disabled={!destOk && !plan.active}
                       aria-label={plan.active ? "Pause" : "Resume"}
                       onClick={() => togglePlan(plan.id)}
                     >

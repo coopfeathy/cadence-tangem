@@ -72,7 +72,10 @@ export function WalletHub() {
         </div>
         <ul className="mt-3 divide-y divide-border rounded-2xl bg-surface shadow-[var(--shadow-border)]">
           {wallets.length === 0 ? (
-            <li className="px-4 py-6 text-sm text-muted">No addresses yet.</li>
+            <li className="px-4 py-6 text-sm text-muted">
+              No addresses yet. Cadences can only settle to addresses you add
+              here.
+            </li>
           ) : (
             wallets.map((w) => (
               <li key={w.id} className="flex items-center justify-between gap-3 px-4 py-3">
@@ -97,6 +100,10 @@ export function WalletHub() {
             ))
           )}
         </ul>
+        <p className="mt-3 text-xs text-subtle">
+          Buys are locked to this list. A cadence cannot target an address you
+          haven’t saved, and removing one pauses every cadence that used it.
+        </p>
       </section>
 
       <section>
