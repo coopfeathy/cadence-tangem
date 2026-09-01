@@ -49,15 +49,6 @@ export function shortenAddress(address: string, left = 6, right = 4): string {
 
 export type CardBrand = "visa" | "mastercard" | "amex" | "discover" | "unknown";
 
-export function detectCardBrand(pan: string): CardBrand {
-  const digits = pan.replace(/\D/g, "");
-  if (/^4/.test(digits)) return "visa";
-  if (/^3[47]/.test(digits)) return "amex";
-  if (/^(5[1-5]|2[2-7])/.test(digits)) return "mastercard";
-  if (/^6/.test(digits)) return "discover";
-  return "unknown";
-}
-
 export function brandLabel(brand: CardBrand): string {
   switch (brand) {
     case "visa":
@@ -71,48 +62,4 @@ export function brandLabel(brand: CardBrand): string {
     default:
       return "Card";
   }
-}
-
-export function luhnOk(pan: string): boolean {
-  const digits = pan.replace(/\D/g, "");
-  if (digits.length < 13 || digits.length > 19) return false;
-  let sum = 0;
-  let alt = false;
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    let n = Number(digits[i]);
-    if (alt) {
-      n *= 2;
-      if (n > 9) n -= 9;
-    }
-    sum += n;
-    alt = !alt;
-  }
-  return sum % 10 === 0;
-}
-
-export function formatPan(pan: string, amex = false): string {
-  const digits = pan.replace(/\D/g, "").slice(0, amex ? 15 : 16);
-  if (amex) {
-    return [digits.slice(0, 4), digits.slice(4, 10), digits.slice(10, 15)]
-      .filter(Boolean)
-      .join(" ");
-  }
-  return digits.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
-}
-
-export function formatExpiry(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-}
-
-export function expiryValid(value: string): boolean {
-  const match = /^(\d{2})\/(\d{2})$/.exec(value.trim());
-  if (!match) return false;
-  const month = Number(match[1]);
-  const year = 2000 + Number(match[2]);
-  if (month < 1 || month > 12) return false;
-  const now = new Date();
-  const exp = new Date(year, month, 1);
-  return exp > now;
 }
